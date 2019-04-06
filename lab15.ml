@@ -2,6 +2,9 @@
                              CS51 Lab 15
          Lazy Programming and Infinite Data Structures Part 2
  *)
+(*
+                               SOLUTION
+ *)
 
 (* In lab 14 you became familiar with the explicit implementation of
 lazy streams. In this lab you will delve further into lazy evaluation
@@ -56,8 +59,9 @@ LazyStreams module provided there and its Exercise 6.
 (* Now we can redo the Fibonacci example. First, we open the
 NativeLazyStreams module so we can use its bits more easily. *)
 
-open NativeLazyStreams ;;
+open NativeLazyStreams_soln ;;
      
+    
     (* Digression: We've just opened NativeLazyStreams above, so we can
     make use of its elements in this file. But if you want to use it in
     the REPL, you'll need to make it accessible there as well, e.g.,
@@ -109,7 +113,8 @@ second argument. For example:
     - : float list = [1.; 2.; 4.; 8.; 16.; 32.; 64.; 128.; 256.; 512.]
 ....................................................................*)
 
-let geo _ = failwith "geo not implemented" ;;
+let rec geo init mult =
+  lazy (Cons (init, (geo (init *. mult) mult))) ;;
 
 (*====================================================================
 Part 2. Eratosthenes' sieve revisited
@@ -136,11 +141,16 @@ Exercise 3. Redo the Eratosthenes sieve using the NativeLazyStreams
 module by completing the values and functions below. 
 ....................................................................*)
 
-let rec nats = lazy (failwith "nats native not implemented") ;;
+let rec nats =
+  lazy (Cons(0, smap ((+) 1) nats)) ;;
  
-let rec sieve s = failwith "sieve native not implemented" ;;
+let not_div_by (n : int) (m : int) : bool = 
+  not (m mod n = 0) ;;
 
-let primes = lazy (failwith "primes native not implemented") ;;
+let rec sieve s =
+  lazy (Cons(head s, sieve (sfilter (not_div_by (head s)) (tail s)))) ;;
+
+let primes = sieve (tail (tail nats)) ;;
 
 (*....................................................................
 Exercise 4. How much further can you get computing primes now that the
@@ -149,8 +159,24 @@ element in a stream, and use it to find out the 2000th prime.
 ....................................................................*)
 
 let rec nth (s : 'a stream) (n : int) : 'a =
-  failwith "nth native not implemented" ;;
+  if n = 0 then head s
+  else nth (tail s) (n - 1) ;;
 
+nth primes 2000 ;;
+
+       
+(* Here's the same table from last lab, now with the new sieve: *)
+exception Done ;;
+
+let prime_timing () =
+  try
+    print_endline "Testing sieve based on native lazy streams";
+    for n = 1 to 100 do
+      let _l, t = CS51.call_timed (first n) primes in
+      Printf.printf "%3d -- %12.8f\n" n t;
+      if t > 0.5 then raise Done
+    done
+  with Done -> () ;;
 
 (*====================================================================
 Part 3: Series acceleration with infinite streams
@@ -165,8 +191,6 @@ Recall from the reading the use of streams to generate approximations
 of pi of whatever accuracy. Try it. You should be able to reproduce
 the following:
 
-   # within 0.01 pi_sums ;;
-   - : int * float = (199, 3.13659268483881615)
    # within 0.001 pi_sums ;;
    - : int * float = (1999, 3.14109265362104129)
    # within 0.0001 pi_sums ;;
@@ -189,7 +213,7 @@ the input stream. For example:
 ....................................................................*)
   
 let average (s : float stream) : float stream =
-  failwith "average not implemented" ;;
+  smap2 (fun x y -> (x +. y) /. 2.0) s (tail s) ;;
 
 (* Now instead of using the stream of approximations in pi_sums, you
 can instead use the stream of averaged pi_sums, which converges much
@@ -217,8 +241,30 @@ Write a function to apply this accelerator to a stream, and use it to
 generate approximations of pi.
 ....................................................................*)
    
+(* Here are two equivalent definitions. *)
 let aitken (s: float stream) : float stream =
-  failwith "aitken not implemented" ;;
+  smap2 (-.)
+        s
+        (smap2 (/.)
+               (smap (fun x -> x *. x)
+                     (smap2 (-.) s (tail s)))
+               (smap2 (+.)
+                      (smap2 (-.)
+                             s
+                             (smap (( *. ) 2.) (tail s)))
+                      (tail  (tail s)))) ;;
+  
+let aitken2 (s: float stream) : float stream =
+  smap2 (-.)
+        (tail (tail s))
+        (smap2 (/.)
+               (smap (fun x -> x *. x)
+                     (smap2 (-.) (tail s) (tail (tail s))))
+               (smap2 (+.)
+                      (smap2 (-.)
+                             (tail (tail s))
+                             (smap (( *. ) 2.) (tail s)))
+                      s)) ;;
 
 (*......................................................................
 Exercise 7: Testing the acceleration
